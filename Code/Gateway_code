@@ -1,0 +1,320 @@
+#include <LiquidCrystal_I2C.h>
+#include <nRF24L01.h>
+#include <printf.h>
+#include <RF24.h>
+#include <RF24_config.h>
+#include <SPI.h>
+#include <iarduino_KB.h>
+#define CE 38
+#define CSN 39
+#define adress_sh 0x47B516A58F13
+#define adress_pump 0x47B516A58A89
+#define adress_humidifier 0x47B516A58B90
+#define adress_win 0x47B516A58CA9
+RF24 rm(CE,CSN);
+
+bool flag_ok;
+bool flag_fail;
+bool flag_rx;
+
+char data[4];
+char test='m';
+
+bool fPump = false;
+bool fHumidifier = false;
+bool fWin = false;
+
+int angle=90;
+int page;
+int wL;
+int H[3];
+int G[3];
+int T[3];
+int limVal[4];
+
+
+iarduino_KB KB(2,3,4,5,6,7,8,9);
+LiquidCrystal_I2C lcd(0x27,16,2);
+void setup() {
+KB.begin(KB1);
+lcd.init();
+lcd.backlight();
+rm.begin();
+rm.setChannel(97);
+rm.setDataRate (RF24_1MBPS);
+rm.setPALevel(RF24_PA_HIGH);
+rm.openReadingPipe(1,adress_sh);
+rm.startListening();
+}
+
+
+void RM_status(){
+  bool ok, fail, rx;
+  rm.whatHappened(ok,fail,rx);
+  flag_ok=ok;
+  flag_fail=fail;
+  flag_rx=rx;
+}
+
+
+void isPump_active(){
+  rm.stopListening();
+  rm.openWritingPipe(adress_pump);
+  rm.write(&test,sizeof(test));
+for (int i=0; i<15;i++){
+  RM_status();
+  if (flag_ok==true){
+    break;
+    }
+  }
+  if (flag_ok==true){
+    flag_ok=false;
+    fPump=true;
+  }
+  else{
+    fPump=false;
+  }
+  rm.flush_tx();
+  rm.flush_rx();
+}
+
+
+void isHumidifier_active(){
+  rm.stopListening();
+  rm.openWritingPipe(adress_humidifier);
+  rm.write(&test,sizeof(test));
+for (int i=0; i<15;i++){
+  RM_status();
+  if (flag_ok==true){
+    break;
+    }
+  }
+  if (flag_ok==true){
+    flag_ok=false;
+    fHumidifier=true;
+  }
+  else{
+    fHumidifier=false;
+  }
+  rm.flush_tx();
+  rm.flush_rx();
+}
+
+
+void isWin_active(){
+  rm.stopListening();
+  rm.openWritingPipe(adress_win);
+  rm.write(&test,sizeof(test));
+for (int i=0; i<15;i++){
+  RM_status();
+  if (flag_ok==true){
+    break;
+    }
+  }
+  if (flag_ok==true){
+    flag_ok=false;
+    fWin=true;
+  }
+  else{
+    fWin=false;
+  }
+  rm.flush_tx();
+  rm.flush_rx();
+}
+
+void p_data_receive(){
+  T[0]=int(data[1]);
+  H[0]=int(data[2]);
+  G[0]=int(data[3]);
+}
+
+void h_data_receive(){
+  T[1]=int(data[1]);
+  H[1]=int(data[2]);
+  G[1]=int(data[3]);
+}
+void send_instructs(char adress){
+  rm.stopListening();
+ if (adress=='h'){
+  rm.openWritingPipe(adress_humidifier);
+  rm.write('w',1);
+  rm.flush_tx();
+ }
+ if (adress=='p'){
+  rm.openWritingPipe(adress_pump);
+  rm.write('w',1);
+  rm.flush_tx();
+ }
+ if (adress=='w'){
+  rm.openWritingPipe(adress_win);
+  if (angle==90){
+  rm.write('9',1);
+  }
+  if (angle==30){
+    rm.write('3',1);
+  }
+  if (angle==110){
+    rm.write('1',1);
+  }
+  if (angle==45){
+    rm.write('4',1);
+  }
+  rm.flush_tx();
+ }
+ if (adress=='W'){
+  rm.openWritingPipe(adress_win);
+  rm.write('0',1);
+  rm.flush_tx();
+ }
+}
+void middler(int mass[3]){
+  mass[2]=(mass[0]+mass[1])/2;
+}
+void on_screen (){
+  if (page==0){
+    lcd.clear();
+    lcd.setCursor(0,0);
+    lcd.print("T:");
+    lcd.print(T[0]);
+    lcd.print(" ");
+    lcd.setCursor(8,0);
+    lcd.print("H1:");
+    lcd.print(H[0]);
+    lcd.print(" ");
+    lcd.setCursor(0,1);
+    lcd.print("M:");
+    lcd.print(G[0]);
+    lcd.print(" ");
+    lcd.setCursor(8,0);
+    lcd.print("Page:");
+    lcd.print(page+1);
+    lcd.print(" ");
+  }
+  if (page==1){
+    lcd.clear();
+    lcd.setCursor(0,0);
+    lcd.print("T:");
+    lcd.print(T[1]);
+    lcd.print(" ");
+    lcd.setCursor(8,0);
+    lcd.print("H:");
+    lcd.print(H[1]);
+    lcd.print(" ");
+    lcd.setCursor(0,1);
+    lcd.print("M:");
+    lcd.print(G[1]);
+    lcd.print(" ");
+    lcd.setCursor(8,0);
+    lcd.print("Page:");
+    lcd.print(page+1);
+    lcd.print(" ");
+  }
+  if (page==2){
+    lcd.clear();
+    lcd.setCursor(0,0);
+    lcd.print("T:");
+    lcd.print(T[2]);
+    lcd.print(" ");
+    lcd.setCursor(8,0);
+    lcd.print("H:");
+    lcd.print(H[2]);
+    lcd.print(" ");
+    lcd.setCursor(0,1);
+    lcd.print("M:");
+    lcd.print(G[2]);
+    lcd.print(" ");
+    lcd.setCursor(8,0);
+    lcd.print("Page:");
+    lcd.print(page+1);
+    lcd.print(" ");
+  }
+ if (page==3){
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Status:");
+  if (fPump==true){
+  lcd.print("1");
+  }
+  else{
+  lcd.print("0");
+  }
+  if (fHumidifier==true){
+  lcd.print("1");
+  }
+  else{
+  lcd.print("0");
+  }
+  if (fWin==true){
+  lcd.print("1");
+  }
+  else{
+  lcd.print("0");
+  }
+  lcd.setCursor(0,1);
+  lcd.print("Warning:");
+  if(wL<limVal[4]){
+  lcd.print("0");
+  }
+  else{
+    lcd.print("1");
+  }
+  if (G[0]==-1){
+    lcd.print(0);
+  }
+  else{
+    lcd.print(1);
+  }
+  if (G[1]==-1){
+    lcd.print(0);
+  }
+  else{
+    lcd.print(1);
+  }
+ }
+}
+
+void loop() {
+if (millis()%1000){
+isWin_active();
+isPump_active();
+isHumidifier_active();
+}
+RM_status();
+if (flag_rx){
+  rm.read(&data,sizeof(data));
+  if (data[0]=='p'){
+    p_data_receive();
+    }
+  if(data[0]=='h'){
+    h_data_receive();
+    }
+  if(data[0]=='w'){
+    wL=data[1];
+    }
+  }
+  middler(T);
+  middler(H);
+  middler(G);
+  if (T[3]>limVal[0]){
+    send_instructs('w');
+  }
+  else{
+    send_instructs('W');
+  }
+  if (H[3]>limVal[1]){
+    send_instructs('h');
+  }
+  if (G[3]>limVal[2]){
+    send_instructs('p');
+  }
+  if(KB.check(KEY_UP)){
+    if (KB.getNum==10){
+      page=(page+1)%4;
+    }
+    if (KB.getNum==11){
+      if (page>0){
+      page=(page-1)%4;
+      }
+    }
+  }
+}

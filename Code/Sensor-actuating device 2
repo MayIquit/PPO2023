@@ -1,0 +1,76 @@
+#include <nRF24L01.h>
+#include <printf.h>
+#include <RF24.h>
+#include <RF24_config.h>
+#include <DHT.h>
+#define CE 7
+#define CSN 6
+#define DHT_PIN 24
+#define adress_sh 0x47B516A58F13
+#define adress_pump 0x47B516A58A89
+#define adress_humidifier 0x47B516A58B90
+#define adress_win 0x47B516A58CA9
+#define YL_PIN 23
+#define PUMP_PIN 27
+bool flag_ok;
+bool flag_fail;
+bool flag_rx;
+
+char data[4]={'p','0','0','0'};
+char cmd;
+int mills;
+
+RF24 rm(CE,CSN);
+DHT dht(DHT_PIN,DHT22);
+
+void RM_status(){
+  bool ok, fail, rx;
+  rm.whatHappened(ok,fail,rx);
+  flag_ok=ok;
+  flag_fail=fail;
+  flag_rx=rx;
+}
+void setup() {
+pinMode(PUMP_PIN, OUTPUT);
+pinMode(YL_PIN,OUTPUT);
+dht.begin();
+rm.begin();
+rm.setChannel(97);
+rm.setDataRate (RF24_1MBPS);
+rm.setPALevel(RF24_PA_HIGH);
+rm.openWritingPipe(adress_sh);
+rm.openReadingPipe(1,adress_pump);
+rm.startListening();
+}
+
+void loop() {
+   RM_status();
+ if (flag_rx){
+  rm.startListening();
+  rm.read(&cmd,sizeof(cmd));
+  if (cmd=='m'){
+    rm.stopListening();
+    int g = map(analogRead(YL_PIN),660,220,0,100);
+    int h = int(dht.readHumidity()/1); 
+    int t = int(dht.readTemperature()/1);
+    data[1]=char(t);
+    data[2]=char(h);
+    data[3]=char(g);
+    rm.stopListening();
+    rm.write(&data,sizeof(data));
+    RM_status();
+    if (flag_ok){
+      rm.flush_tx();
+    }
+  }
+  if(cmd=='p'){
+    mills=millis();
+  }
+  if (millis()-mills<10000){
+    digitalWrite(PUMP_PIN,HIGH);
+  }
+  else{
+     digitalWrite(PUMP_PIN,LOW);
+  }
+ }
+}

@@ -1,0 +1,108 @@
+#include <nRF24L01.h>
+#include <printf.h>
+#include <RF24.h>
+#include <RF24_config.h>
+#include <Stepper.h>
+#include <HX711.h>
+#define DOUT 3
+#define SCK 2
+#define Motor_Pin1 14
+#define Motor_Pin2 15
+#define Motor_Pin3 16
+#define Motor_Pin4 17
+#define WL_PIN A1
+#define CE 7
+#define CSN 6
+#define adress_sh 0x47B516A58F13
+#define adress_pump 0x47B516A58A89
+#define adress_humidifier 0x47B516A58B90
+#define adress_win 0x47B516A58CA9
+
+
+RF24 rm(CE,CSN);
+Stepper Motor(360,Motor_Pin1,Motor_Pin2,Motor_Pin3,Motor_Pin4);
+HX711 Tenzo;
+
+bool flag_ok;
+bool flag_fail;
+bool flag_rx;
+
+char data[4]={'w','0','0','0'};
+char cmd;
+float cal=-0.64;
+int wL;
+int angle=0;
+
+void RM_status(){
+  bool ok, fail, rx;
+  rm.whatHappened(ok,fail,rx);
+  flag_ok=ok;
+  flag_fail=fail;
+  flag_rx=rx;
+}
+
+
+void setup() {
+pinMode(WL_PIN,OUTPUT);
+Tenzo.begin(DOUT,SCK);
+Tenzo.set_scale();
+Tenzo.tare();
+Tenzo.set_scale(cal);
+Motor.setSpeed(720);
+rm.begin();
+rm.setChannel(97);
+rm.setDataRate (RF24_1MBPS);
+rm.setPALevel(RF24_PA_HIGH);
+rm.openWritingPipe(adress_sh);
+rm.openReadingPipe(1,adress_win);
+rm.startListening();
+}
+
+
+void loop() {
+ RM_status();
+ if (flag_rx){
+  rm.startListening();
+  rm.read(&cmd,sizeof(cmd));
+  if (cmd=='m'){
+    rm.stopListening();
+    wL=analogRead(WL_PIN);
+    data[1]=char(wL);
+    rm.stopListening();
+    rm.write(&data,sizeof(data));
+    RM_status();
+    if (flag_ok){
+      rm.flush_tx();
+    }
+  }
+ }
+ if (cmd=='9'){
+  if (Tenzo.get_units(10)* 0.035274<1000){
+    Motor.step(90-angle);
+    angle=90;
+    }
+  else{
+    Motor.step(45-angle);
+    angle=45;
+    }
+  }
+ if (cmd=='1'){
+  if (Tenzo.get_units(10)* 0.035274<1000){
+    Motor.step(110-angle);
+    angle=110;
+    }
+  else{
+    Motor.step(45-angle);
+    angle=45;
+    }
+  }
+if (cmd=='3'){
+  Motor.step(30-angle);
+  }
+if(cmd='4'){
+  Motor.step(45-angle);
+  }
+if(cmd='0'){
+  Motor.step(0-angle);
+  }
+}
